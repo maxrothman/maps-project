@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title></title>
+    <style>
+      /* html, body {
+        padding: 0;
+      }*/
+      html, body {
+        height: 100%;
+        /*width: 100%;*/
+        margin: 0px;
+        padding: 0;
+        /*border: 0;
+        overflow: hidden;
+        display: block;*/
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+    <script type="text/javascript">
+      function flat_sample() {
+        var step = 15;
+        var canvas = document.getElementById('canvas');
+        var ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        console.log(canvas.width + ', ' + canvas.height);
+        // ctx.fillStyle = "#000000";
+        var id = ctx.createImageData(1,1);
+        var d  = id.data;
+        d[3]   = 255;
+
+        for (var x = step; x < canvas.width - step; x+=step) {
+          for (var y = step; y < canvas.height - step; y+=step) {
+            // ctx.fillRect(x, y, 1, 1);
+            // console.log('drawing ' + x + ', ' + y);
+            ctx.putImageData(id, x, y);
+          }
+        }
+      }
+
+      function scaled_sample() {
+        var points = [{x: 580, y: 440}],
+            margin = 15,
+            sample_size = 50,
+            num_points = 5000,
+            canvas = document.getElementById('canvas'),
+            ctx = canvas.getContext('2d'),
+            dot = ctx.createImageData(1,1);
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        dot.data[3] = 255
+
+        var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        for (var i = 0; i < num_points; i++) {
+          var x = rand(margin, canvas.width - margin), y = rand(margin, canvas.height - margin);
+          var idx = (x * canvas.width + y) * 4;
+          var area = ctx.getImageData(x - (sample_size/2), y - (sample_size/2),
+                                  x + (sample_size/2), y + (sample_size/2));
+          
+          var found = 0;
+          for (var p=0; p<area.data.length; p+=4) {
+            var r = area.data[p], g = area.data[p+1], b = area.data[p+2], a = area.data[p+3];
+            if ((r == 0) && (g == 0) && (b == 0) && (a == 255)) {
+              found++;
+            }
+          }
+
+          var density = found / (area.width * area.height)
+          var expected_density = get_density({x:x, y:y}, points);
+          
+          if (density < expected_density) {
+            // ctx.putImageData(dot, x, y);
+            data.data[idx+3] = 255;
+          }
+        }
+        ctx.putImageData(data, 0, 0)
+      }
+
+      function get_density(point, origins) {
+        var origin = origins[0];
+        return 1/Math.sqrt(Math.sqrt(Math.pow(point.x - origin.x, 2) + Math.pow(point.y - origin.y, 2)));
+      }
+
+      function rand(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+
+      function show_density() {
+        var points = [{x: 580, y: 440}],
+            canvas = document.getElementById('canvas'),
+            ctx = canvas.getContext('2d'),
+            dot = ctx.createImageData(1,1);
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        //don't do the drawing in the loop cuz it's slow
+        var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        for (var x=0; x<canvas.width; x++) {
+          for (var y=0; y<canvas.height; y++) {
+            var idx = (x * canvas.width + y) * 4;
+            var density = get_density({x:x, y:y}, points);
+            //mapping density range (0-15) onto alpha range (0-255)
+            if (density == Infinity) {
+              data.data[idx+3] = 255;
+            } else {
+              data.data[idx+3] = (255) * density;
+            }
+          }
+        }
+        ctx.putImageData(data, 0, 0);
+        return data;
+      }
+
+      show_density();
+      // scaled_sample();
+
+    </script>
+  </body>
+</html>
