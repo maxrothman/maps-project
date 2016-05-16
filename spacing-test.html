@@ -41,6 +41,7 @@
         }
       }
 
+      //still slow, even after removing getImageData and putImageData calls
       function scaled_sample() {
         var points = [{x: 580, y: 440}],
             margin = 15,
@@ -58,17 +59,28 @@
 
         for (var i = 0; i < num_points; i++) {
           var x = rand(margin, canvas.width - margin), y = rand(margin, canvas.height - margin);
-          var idx = (x * canvas.width + y) * 4;
+          var idx = coords2idx(x, y);
           var area = ctx.getImageData(x - (sample_size/2), y - (sample_size/2),
                                   x + (sample_size/2), y + (sample_size/2));
           
           var found = 0;
-          for (var p=0; p<area.data.length; p+=4) {
-            var r = area.data[p], g = area.data[p+1], b = area.data[p+2], a = area.data[p+3];
-            if ((r == 0) && (g == 0) && (b == 0) && (a == 255)) {
-              found++;
+          for (var x1 = x - sample_size/2; x1 <= x + sample_size/2; x1++) {
+            for (var y1 = y - sample_size/2; y1 <= y + sample_size/2; y1++) {
+              var idx1 = coords2idx(x1, y1)
+              if ((data.data[idx] == 0) && (data.data[idx+1] == 0) && 
+                  (data.data[idx+2] == 0) && (data.data[idx+3] == 255)) {
+                found++;
+              }
             }
           }
+
+
+          // for (var p=0; p<area.data.length; p+=4) {
+          //   var r = area.data[p], g = area.data[p+1], b = area.data[p+2], a = area.data[p+3];
+          //   if ((r == 0) && (g == 0) && (b == 0) && (a == 255)) {
+          //     found++;
+          //   }
+          // }
 
           var density = found / (area.width * area.height)
           var expected_density = get_density({x:x, y:y}, points);
@@ -118,8 +130,12 @@
         return data;
       }
 
-      show_density();
-      // scaled_sample();
+      function coords2idx(x, y) {
+        return (x * canvas.width + y) * 4;
+      }
+
+      // show_density();
+      scaled_sample();
 
     </script>
   </body>
