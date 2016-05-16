@@ -28,7 +28,67 @@
     </script>
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDdbmjBDkAkdNWwLR5__eKDItE4-yxQBEo&callback=initMap"
     ><!-- async defer>--></script>
-    <script >
+    <script>
+      function extend(obj1, obj2) {
+        for (var k in obj2) {
+          obj1[k] = obj2[k];
+        }
+      }
+      function get_borders(origin, step) {
+        return [
+          google.maps.LatLng(origin.lat() + step, origin.lng()),
+          google.maps.LatLng(origin.lat() - step, origin.lng()),
+          google.maps.LatLng(origin.lat(),        origin.lng() + step),
+          google.maps.LatLng(origin.lat(),        origin.lng() - step),
+          google.maps.LatLng(origin.lat() - step, origin.lng() - step),
+          google.maps.LatLng(origin.lat() + step, origin.lng() + step),
+          google.maps.LatLng(origin.lat() - step, origin.lng() + step),
+          google.maps.LatLng(origin.lat() + step, origin.lng() - step)
+        ]
+      }
+
+      function explore(origin, radius) {
+        radius = radius || 1;  //units == lat/lng degrees
+        //Use rectangular coordinates. Eventually should switch to circular
+        // ref: http://stackoverflow.com/questions/1201200/fast-algorithm-for-drawing-filled-circles
+        //May or may not work, depending on whether I want to explore the whole circle
+        // or get all points equi-travel-time from the origin.
+        //Might be a good idea to decouple point generation so I can search arbitrary shapes
+        // e.g. square, rect, circle, elipse, equi-travel-time blob, etc.
+        
+        //use objects as sets to do easy membership testing
+        //this won't be necessary once I switch to a better algorithm
+        var explored = {};
+        var search_front = {};
+        search_front[origin.toString()] = origin;
+        
+        //Since we're extending outwards in a (square, circle, whatever)
+        // we know exactly how far away from the origin we are.
+        //Therefore, stop searching when the point is outside the search (distance) range.
+        //This might eventually get ditched if we get all points equi-travel-time from origin
+        // since I'll need to ask google to get the travel time to know when to stop searching.
+        for (var r = 1; i <= radius; r++) {
+          var new_search_front = {};
+          
+          for (var pointstr in search_front) {
+            var point = search_front[pointstr];
+            
+            var borders = get_borders(point);
+            for (var i = 0; i < borders.length; i++) {
+              var borderpt = borders[i];
+              
+              if (!(borderpt in explored)) {
+                new_search_front[borderpt.toString()] = borderpt;
+              }
+              // else: skip it
+            }
+          }
+
+          extend(explored, new_search_front)
+          search_front = new_search_front;
+        }
+      }
+
       //My home
       var origin1 = new google.maps.LatLng(42.3864579, -71.1154477);
       var destinations = [];
