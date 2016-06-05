@@ -21,24 +21,22 @@
     <canvas id="canvas"></canvas>
     <script type="text/javascript">
       function flat_sample() {
-        var step = 15;
+        var step = 5;
         var canvas = document.getElementById('canvas');
         var ctx = canvas.getContext('2d');
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        console.log(canvas.width + ', ' + canvas.height);
-        // ctx.fillStyle = "#000000";
-        var id = ctx.createImageData(1,1);
-        var d  = id.data;
-        d[3]   = 255;
 
-        for (var x = step; x < canvas.width - step; x+=step) {
-          for (var y = step; y < canvas.height - step; y+=step) {
-            // ctx.fillRect(x, y, 1, 1);
-            // console.log('drawing ' + x + ', ' + y);
-            ctx.putImageData(id, x, y);
+        //don't do the drawing in the loop cuz it's slow
+        var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        for (var x=0; x<canvas.width; x+=step) {
+          for (var y=0; y<canvas.height; y+=step) {
+            var idx = (y * canvas.width + x) * 4;
+            data.data[idx+3] = 255
           }
         }
+        ctx.putImageData(data, 0, 0);
       }
 
       //still slow, even after removing getImageData and putImageData calls
@@ -95,7 +93,8 @@
 
       function get_density(point, origins) {
         var origin = origins[0];
-        return 1/Math.sqrt(Math.sqrt(Math.pow(point.x - origin.x, 2) + Math.pow(point.y - origin.y, 2)));
+        stddev = 100
+        return Math.exp(-1/(2*stddev*stddev) * ( Math.pow(point.x-origin.x, 2) + Math.pow(point.y-origin.y, 2) ))
       }
 
       function rand(min, max) {
@@ -103,20 +102,20 @@
       }
 
       function show_density() {
-        var points = [{x: 580, y: 440}],
-            canvas = document.getElementById('canvas'),
-            ctx = canvas.getContext('2d'),
-            dot = ctx.createImageData(1,1);
+        var canvas = document.getElementById('canvas'),
+            ctx = canvas.getContext('2d');
 
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+
+        var points = [{x: Math.round(canvas.width/2), y: Math.round(canvas.height/2)}];
 
         //don't do the drawing in the loop cuz it's slow
         var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
         for (var x=0; x<canvas.width; x++) {
           for (var y=0; y<canvas.height; y++) {
-            var idx = (x * canvas.width + y) * 4;
+            var idx = (y * canvas.width + x) * 4;
             var density = get_density({x:x, y:y}, points);
             //mapping density range (0-15) onto alpha range (0-255)
             if (density == Infinity) {
@@ -206,9 +205,151 @@
       }
 
 
+      function center_of_mass() {
+        var origins = [{x: 580, y: 440}],
+            skip = 20,
+            canvas = document.getElementById('canvas'),
+            ctx = canvas.getContext('2d'),
+            imgdata = ctx.getImageData(0, 0, canvas.width, canvas.height),
+            data = imgdata.data;
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+      }
+
+      //iterate over contiguous squares, as many fit in the space.
+      //block_size is the length of each side of the square
+      function iterate_contiguous_blocks(block_size, placement_function, data) {
+        for(var x=0; x+block_size<canvas.width; x+=block_size) {
+          for (var y=0; y+block_size<canvas.height; y+=block_size) {
+            com = get_com(x, y, x+block_size, y+block_size);
+            draw_pixel(com.x, com.y, data);
+          }
+        }
+      }
+
+      function draw_pixel(x, y, data) {
+        data[coords2idx(x, y) + 3] = 255;
+      }
+
+      //Using the analogy of a mass density distribution, this returns the coordinates
+      // of the center of mass of the area bounded by x1 -> x2, y1 -> y2.
+      //It's 1/M ∫ p(r)*r dr, where r is a coordinate, p(r) is a density function,
+      // and M is the result of get_mass().
+      //Here, we use a gaussian for our density function, e^(-1/2(x^2+y^2))
+      function get_com(x1, y1, x2, y2) {
+        var mass = get_mass(x1, y1, x2, y2);
+        
+        function y_integral(x, y) {
+          return x + Math.sqrt(Math.PI/2) * Math.pow(Math.E, y*y/2) * erfi(x/Math.sqrt(2));
+        }
+        function x_integral(x, y) {
+          return x + Math.sqrt(Math.PI/2) * Math.pow(Math.E, x*x/2) * erfi(y/Math.sqrt(2));
+        }
+
+        return {
+          x: (1/mass) * (x_integral(x2, y2) - x_integral(x1, y1)),
+          y: (1/mass) * (y_integral(x2, y2) - y_integral(x1, y1))
+        };
+      }
+
+
+      //Using the analogy of a mass density distribution, this returns the total mass
+      // of the area bounded by x1 -> x2, y1 -> y2.
+      //It's the integral of the density over the area.
+      //Here, we use a gaussian for our density function, e^(-1/2(x^2+y^2))
+      function get_mass(x1, y1, x2, y2) {
+        function integral(x, y) {
+          return y + 1/2 * Math.PI * erf(x/Math.sqrt(2)) * erf(y/Math.sqrt(2));
+        }
+
+        return integral(x2, y2) - integral(x1, y1);
+      }
+
+      //Approximtes the error function, which comes out of the integral of the gaussian.
+      //Uses first approximation found here: https://en.wikipedia.org/wiki/Error_function#Approximation_with_elementary_functions
+      //Maximum error: 5e-4
+      function erf(x) {
+        var a1 = 0.278393,
+            a2 = 0.230389,
+            a3 = 0.000927,
+            a4 = 0.078108;
+
+        return 1/Math.pow(1 + a1*x + a2*x*x + a3*x*x*x + a4*x*x*x*x, 4);
+      }
+
+      //Approximates the imaginary error function, which comes out of the integral
+      //in calculating the center of mass.
+      //Uses order n=3 optimized for best absolute error with function found here:
+      //http://www.ebyte.it/library/codesnippets/DawsonIntegralApproximations.html
+      //Maximum absolute error: 1.19e-4
+      function erfi(x) {
+        var p1 = 0.1154998994,
+            p2 = 0.0338088612,
+            p3 = 0.0106523108,
+            q1 = 0.7790120439,
+            q2 = 0.3023475798,
+            q3 = 0.0533374765;
+
+        var dawson = (1 + x*(p1 + x*(p2 + x*p3))) / (1 + x*(q1 + x*(q2 + x*(q3 + 2*p3*x))));
+        return 2/Math.sqrt(Math.PI) * Math.pow(Math.E, x*x) * dawson;
+      }
+
+
+      function scaled_skipping() {
+        var minstep = 5,
+          stepscale = 20,
+          canvas = document.getElementById('canvas'),
+          ctx = canvas.getContext('2d');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        var points = [{x: Math.round(canvas.width/2), y: Math.round(canvas.height/2)}];
+
+        //don't do the drawing in the loop cuz it's slow
+        var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+        //initialize previous y-value tracker
+        var prevcols = new Array(canvas.width);
+        for (var i = 0; i < prevcols.length; i++) {
+          prevcols[i] = {yold:0, ystep:0};
+        }
+
+        var x=0, y=0;
+        for (var y = 0; y < canvas.width; y++) {
+          x = 0;
+          while (x < canvas.width) {
+            // if we've skipped a sufficient number of pixels in y, draw & reset step
+            // we've already ensured we've skipped enough in x by jumping by xstep
+            var prevy = prevcols[x];
+            if (y >= prevy.yold + prevy.ystep) {
+              //draw
+              var idx = (y * canvas.width + x) * 4;
+              data.data[idx+3] = 255;
+
+              prevy.yold = y;
+              prevy.ystep = Math.round(stepscale * (1 - get_density({x:x, y:y}, points)) + minstep);
+            }
+
+            //ranges between minstep -> stepscale+minstep
+            //get_density() should range between 0->1
+            var xstep = Math.round(stepscale * (1 - get_density({x:x, y:y}, points)) + minstep);
+            x += xstep;
+            // ctx.putImageData(data,0,0);
+            1
+          }
+        }
+        ctx.putImageData(data, 0, 0);
+      }
+
+
       // show_density();
       // scaled_sample();
-      k_means()
+      // k_means()
+      // flat_sample();
+      // scaled_skipping();
 
     </script>
   </body>
