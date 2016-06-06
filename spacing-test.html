@@ -20,6 +20,8 @@
   <body>
     <canvas id="canvas"></canvas>
     <script type="text/javascript">
+      'use strict'
+
       function flat_sample() {
         var step = 5;
         var canvas = document.getElementById('canvas');
@@ -93,7 +95,7 @@
 
       function get_density(point, origins) {
         var origin = origins[0];
-        stddev = 100
+        var stddev = 100;
         return Math.exp(-1/(2*stddev*stddev) * ( Math.pow(point.x-origin.x, 2) + Math.pow(point.y-origin.y, 2) ))
       }
 
@@ -310,37 +312,74 @@
 
         //don't do the drawing in the loop cuz it's slow
         var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        
+        var x, new_prevrows, prevrows, prevy, prevy_idx, prevy_boundary, drew;
+        
+        //this will become prevrows in the first iteration of the outer loop
+        //we need 2 items so the initialization works properly
+        new_prevrows = [
+          {pt: {x: 0,            y: 0}, ystep: 0},
+          {pt: {x: canvas.width, y: 0}, ystep: 0}
+        ];
+        
 
-        //initialize previous y-value tracker
-        var prevcols = new Array(canvas.width);
-        for (var i = 0; i < prevcols.length; i++) {
-          prevcols[i] = {yold:0, ystep:0};
-        }
-
-        var x=0, y=0;
         for (var y = 0; y < canvas.width; y++) {
-          x = 0;
+          
+          //rotate prevrows
+          prevrows = new_prevrows;
+          new_prevrows = [];
+
+          // Split the row into regions around the points in that row.
+          // The boundary between each region is halfway in between each point.
+          prevy_idx = 0;
+          prevy = prevrows[prevy_idx];
+          prevy_boundary = (prevy.pt.x + prevrows[1].pt.x) / 2;
+          
+          x = 0, drew = false;
           while (x < canvas.width) {
+
             // if we've skipped a sufficient number of pixels in y, draw & reset step
             // we've already ensured we've skipped enough in x by jumping by xstep
-            var prevy = prevcols[x];
-            if (y >= prevy.yold + prevy.ystep) {
+            if (y >= prevy.pt.y + prevy.ystep) {
               //draw
               var idx = (y * canvas.width + x) * 4;
               data.data[idx+3] = 255;
-              ctx.fillRect(x, y, 1, 1);
+              // ctx.fillRect(x, y, 1, 1);
 
-              prevy.yold = y;
-              prevy.ystep = Math.round(stepscale * (1 - get_density({x:x, y:y}, points)) + minstep);
+              new_prevrows.push({
+                pt: {x: x, y: y},
+                ystep: Math.round(stepscale * (1 - get_density({x:x, y:y}, points)) + minstep)
+              });
+              drew = true;
             }
 
             //ranges between minstep -> stepscale+minstep
             //get_density() should range between 0->1
             var xstep = Math.round(stepscale * (1 - get_density({x:x, y:y}, points)) + minstep);
             x += xstep;
-          }
+
+            //do this last on the new x because otherwise, if the last point
+            //needs to be pushed, we break the loop before pushing it
+            if (x > prevy_boundary) {
+              // if we didn't draw anything in this column, pass the old value through
+              if (!drew) {
+                new_prevrows.push(prevy);
+              }
+              drew = false;
+
+              //switch to the next column
+              prevy_idx += 1
+              prevy = prevrows[prevy_idx];
+
+              // handle the edge of the canvas
+              if (prevy_idx+1 >= prevrows.length) {
+                prevy_boundary = canvas.width;
+              } else {
+                prevy_boundary = (prevy.pt.x + prevrows[prevy_idx+1].pt.x) / 2;
+              }
+            }
         }
-        // ctx.putImageData(data, 0, 0);
+        ctx.putImageData(data, 0, 0);
       }
 
 
@@ -348,7 +387,7 @@
       // scaled_sample();
       // k_means()
       // flat_sample();
-      // scaled_skipping();
+      scaled_skipping();
 
     </script>
   </body>
