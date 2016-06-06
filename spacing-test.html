@@ -328,6 +328,7 @@
               //draw
               var idx = (y * canvas.width + x) * 4;
               data.data[idx+3] = 255;
+              ctx.fillRect(x, y, 1, 1);
 
               prevy.yold = y;
               prevy.ystep = Math.round(stepscale * (1 - get_density({x:x, y:y}, points)) + minstep);
@@ -337,11 +338,9 @@
             //get_density() should range between 0->1
             var xstep = Math.round(stepscale * (1 - get_density({x:x, y:y}, points)) + minstep);
             x += xstep;
-            // ctx.putImageData(data,0,0);
-            1
           }
         }
-        ctx.putImageData(data, 0, 0);
+        // ctx.putImageData(data, 0, 0);
       }
 
 
