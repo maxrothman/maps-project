@@ -278,8 +278,12 @@ function erfi(x) {
 
 
 function scaled_skipping() {
-  var minstep = 5,
-    stepscale = 20,
+  /* This would work great in the case of a normal distribution with a single
+  maximum because I could simply do a single quadrant then rotate it around
+  the center. That shortcut unfortunately fails when there is >1 maximum. */
+
+  var minstep = 2,
+    stepscale = 10,
     canvas = document.getElementById('canvas'),
     ctx = canvas.getContext('2d');
 
@@ -300,8 +304,7 @@ function scaled_skipping() {
     {pt: {x: canvas.width, y: 0}, ystep: 0}
   ];
   
-
-  for (var y = 0; y < canvas.width; y++) {
+  for (var y = 0; y < canvas.height; y++) {
 
     //rotate prevrows
     prevrows = new_prevrows;
@@ -320,9 +323,10 @@ function scaled_skipping() {
       // we've already ensured we've skipped enough in x by jumping by xstep
       if (y >= prevy.pt.y + prevy.ystep) {
         //draw
+        console.log(x + ',' + y);
         var idx = (y * canvas.width + x) * 4;
-        data.data[idx+3] = 255;
-        // ctx.fillRect(x, y, 1, 1);
+        // data.data[idx+3] = 255;
+        ctx.fillRect(x, y, 1, 1);
 
         new_prevrows.push({
           pt: {x: x, y: y},
@@ -357,13 +361,189 @@ function scaled_skipping() {
         }
       }
     }
-    ctx.putImageData(data, 0, 0);
+    // ctx.putImageData(data, 0, 0);
   }
 }
 
+//turns out I'm looking for a sort of cumulative distribution function,
+//not an integral of the gaussian
+/*
+function gaussian_integral_2d(x, y) {
+  return 0.5 * Math.sqrt(Math.PI/2) * Math.exp(-y*y/2) * erf(x/Math.sqrt(2))
+}
+
+function test_gaussian_integral_2d() {
+  var canvas = document.getElementById('canvas'),
+      ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  // for (var x=0; x<canvas.width; x++) {
+    // for (var y=0; y<canvas.height; y++) {
+  for (var x=)
+      var idx = (y * canvas.width + x) * 4;
+      var value = gaussian_integral_2d(x, y);
+      //mapping function range (-.5 to .5) onto alpha range (0-255)
+      data.data[idx+3] = (value + 0.5) * 255
+    }
+  }
+  ctx.putImageData(data, 0, 0);
+}
+*/
+
+/* erf must be no good, but the cumulative dist approximation
+   by totalling works fine
+*/
+function test_cumulative() {
+  var canvas = document.getElementById('canvas'),
+      ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  var y = 400, total = 0, gaussian, frac_x;
+  
+  for (var x=0; x<500; x++) {
+    frac_x = (x-200) * .01;
+    gaussian = Math.exp(-frac_x*frac_x);
+    total += gaussian;
+    ctx.fillStyle = 'black';
+    ctx.fillRect(x, y - gaussian*200, 1, 1);
+    ctx.fillStyle = 'green';
+    var cdf = (1/2 * (1 + erf(frac_x/Math.sqrt(2))));
+    ctx.fillRect(x, y - cdf*100, 1, 1);
+    ctx.fillStyle = 'red';
+    ctx.fillRect(x, y - total, 1, 1);
+
+  }
+}
+
+
+function show_cumulative() {
+  var canvas = document.getElementById('canvas'),
+      ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+
+  var origins = [{x: 580, y: 440}];
+
+  var z, total, idx;
+
+  //main loop
+  for (var y=0; y<canvas.height; y++) {
+    total = 0;
+    for (var x=0; x<canvas.width; x++) {
+      z = get_density({x: x, y: y}, origins);
+      total += z;
+
+      //draw
+      idx = (y * canvas.width + x) * 4;
+      data.data[idx+3] = total;
+
+    }
+  }
+  ctx.putImageData(data, 0, 0);
+}
+
+function mesh_skipping() {
+  var canvas = document.getElementById('canvas'),
+      ctx = canvas.getContext('2d');
+
+  
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  /*
+    start with x=0, y=0, z=f(x,y)
+    move `step` along the surface defined by f in the +x direction
+    store where every point went
+    next row, draw the point `step` below the previous one along the surface defined by f
+  */
+  var step = 10, x = 0, y = 0;
+  draw_pixel(x, y, data);
+  
+  while (y < canvas.height) {
+    while (x < canvas.width) {
+
+    }
+  }
+}
 
 // show_density();
 // scaled_sample();
 // k_means()
 // flat_sample();
-scaled_skipping();
+// scaled_skipping();
+// test_cumulative();
+show_cumulative();
+
+//682x199
+//701x200
+
+/*
+- Could use top-down view of mesh with equal-length edges
+- once you collapse the z-axis, verticies on the mesh where there was mostly
+  z-movement look close together
+- Wait, that shows rate of change like a topo map, not density (height)
+- what if we did that to the graph of the integral of the function? Then
+  higher rate of change would be the same as height of the original function
+  (now the derivative)
+- Rather than taking a flat grid and deforming it, think about it as laying a map
+  of points on top of the function surface where every point is equidistant from
+  its neighbors along the surface defined by the function
+  - still doesn't work, you can't make any shape this way you can't make out of
+    rectangles joined at angles
+  - e.g you can make a gaussian curve that varies in x, but not one that varies
+    in x and y. For that, you need non-square polygons
+  - if you add flexibility in one dimension but not the other, it doesn't go back
+    to looking like a nice grid on the other side
+
+This could work
+- let f be a function such that the slope of f is proportional to the magnitude of
+  the gaussian function, but that f's magnitude decreases when the gaussian's
+  magnitude decreases.
+- I want the absolute value!
+- (-|erf(x)| + 1)(-|erf(y) + 1) gets pretty close, except it's not circularly
+  symmetric
+- |-1/(x^2+y^2)| might work if you truncate at x=0 y=0
+  - circularly symmetric
+  - slope continuously increases when approaching 0
+- Now we can grid this and it'll do what we want
+  - gridding might be hard? This might prove challenging
+
+Now that we have the function, how to we grid it?
+- When placing a next point (moving along x), try to put it a set distance away
+  along the surface
+- check how far away the corresponding previous y point is
+- if ydist > xdist, increase xdist until they're equal
+- thus all the x lines are parallel and all the y lines are parallel
+  but the squares end up more like stretched diamonds
+- DOESN'T WORK
+- The way mac grapher's gridding works is:
+  - start with a flat grid, all pts equidistant in x and y
+  - move each point up/down in z until it's on the surface
+  - thus if you collapse z, you end up back with a flat grid
+- My method stretches xdist until it's equal to ydist
+  - if when doing so you keep the grid lines parallel, then xdist will increase
+    until you get the same result as mac grapher's method
+  - if you don't keep the grid lines parallel, all hell breaks loose
+
+  If you allow the grid lines to stretch along the surface, then you lose the
+  property of un-stretchy lines where the points get closer together when
+  viewed from the top
+  Meaning when you collapse the z-dimension you just end up with a flat grid
+
+- Next steps: look at methods of mesh and grid generation
+  Those are designed to make a rendition of a shape using polygons
+  and hopefully the area of the polygons can be limited
+
+- Alternative: rather than skipping in x and y, skip in r and θ
+  - no good: what about multiple centers? Where do you center your coordinates?
+
+
+- New idea: follow gradient with some sort of initial velocity?
+*/
