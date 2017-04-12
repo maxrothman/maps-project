@@ -544,7 +544,7 @@ function bayer_dithering(matrix) {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
   var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  var stddev = 150;
+  var stddev = 130;
 
   var idx, i, j, value, function_val, result;
   for (var y=0; y<canvas.height; y++) {
@@ -580,7 +580,7 @@ function bayer_dithering(matrix) {
 // test_cumulative();
 // show_cumulative();
 // test_generate_bayer();
-bayer_dithering(generate_bayer(32));
+bayer_dithering(generate_bayer(64));
 
 //682x199
 //701x200
