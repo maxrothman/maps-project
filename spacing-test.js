@@ -72,9 +72,12 @@ function scaled_sample() {
 }
 
 function get_density(point, origins) {
-  var origin = origins[0];
   var stddev = 100;
-  return Math.exp(-1/(2*stddev*stddev) * ( Math.pow(point.x-origin.x, 2) + Math.pow(point.y-origin.y, 2) ));
+  var total = 0;
+  for (var i = 0; i < origins.length; i++) {
+    total += Math.exp(-1/(2*stddev*stddev) * ( Math.pow(point.x-origins[i].x, 2) + Math.pow(point.y-origins[i].y, 2) ));
+  }
+  return total
 }
 
 function rand(min, max) {
@@ -97,7 +100,7 @@ function show_density() {
     for (var y=0; y<canvas.height; y++) {
       var idx = (y * canvas.width + x) * 4;
       var density = get_density({x:x, y:y}, points);
-      //mapping density range (0-15) onto alpha range (0-255)
+      //mapping density range (0-1) onto alpha range (0-255)
       if (density == Infinity) {
         data.data[idx+3] = 255;
       } else {
@@ -473,13 +476,101 @@ function mesh_skipping() {
   }
 }
 
+var bayer16 = [[ 0,  8,  2, 10],
+               [12,  4, 14,  6],
+               [ 3, 11,  1,  9],
+               [15,  7, 13,  5]];
+
+var bayer64 = [[ 0, 48, 12, 60,  3, 51, 15, 63],
+               [32, 16, 44, 28, 35, 19, 47, 31],
+               [ 8, 56,  4, 52, 11, 59,  7, 55],
+               [40, 24, 36, 20, 43, 27, 39, 23],
+               [ 2, 50, 14, 62,  1, 49, 13, 61],
+               [34, 18, 46, 30, 33, 17, 45, 29],
+               [10, 58,  6, 54,  9, 57,  5, 53],
+               [42, 26, 38, 22, 41, 25, 37, 21]];
+
+var dot64 = [[24, 10, 12, 26, 35, 47, 49, 37],
+             [ 8,  0,  2, 14, 45, 59, 61, 51],
+             [22,  6,  4, 16, 43, 57, 63, 53],
+             [30, 20, 18, 28, 33, 41, 55, 39],
+             [34, 46, 48, 36, 25, 11, 13, 27],
+             [44, 58, 60, 50,  9,  1,  3, 15],
+             [42, 56, 62, 52, 23,  7,  5, 17],
+             [32, 40, 54, 38, 31, 21, 19, 29]];
+
+function generate_bayer(size) {
+  //size should be a power of 2, and is the length of a side of the matrix
+  var base = [[0, 2],
+              [3, 1]];
+  var old_matrix = base;
+  var mult = 4;
+  
+  while (old_matrix.length < size) {
+    //generate a new matrix of the proper dimensions
+    var new_size = old_matrix.length * 2;
+    var matrix = new Array(new_size);
+    for (var i = 0; i < matrix.length; i++) {
+      matrix[i] = new Array(new_size);
+    }
+
+    for (var y = 0; y < old_matrix.length; y++) {
+      for (var x = 0; x < old_matrix[y].length; x++) {
+        matrix[y*2]    [x*2]     = old_matrix[y][x] + (mult * base[0][0]);
+        matrix[y*2]    [x*2 + 1] = old_matrix[y][x] + (mult * base[0][1]);
+        matrix[y*2 + 1][x*2]     = old_matrix[y][x] + (mult * base[1][0]);
+        matrix[y*2 + 1][x*2 + 1] = old_matrix[y][x] + (mult * base[1][1]);
+      }
+    }
+
+    mult *= 4;
+    old_matrix = matrix;
+  }
+  return old_matrix;
+}
+
+function test_generate_bayer() {
+  var assert_equal = function(left, right, msg) {
+    if (JSON.stringify(left) !== JSON.stringify(right)) { throw msg; }
+  }
+
+  assert_equal(generate_bayer(4), bayer16, '1 failed!');
+  assert_equal(generate_bayer(8), bayer64, '2 failed!');
+}
+
+function bayer_dithering(matrix) {
+  var canvas = document.getElementById('canvas'),
+      ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  var idx, i, j, value, function_val, result;
+  for (var y=0; y<canvas.height; y++) {
+    for (var x=0; x<canvas.width; x++) {
+      i = x % matrix.length;
+      j = y % matrix.length;
+
+      function_val = get_density({x:x, y:y}, [{x: 480, y: 340}, {x: 780, y: 540}]) * .3
+      idx = (y * canvas.width + x) * 4;
+      result = function_val * matrix.length > matrix[j][i] ? 255 : 0;
+
+      data.data[idx+3] = result;
+    }
+  }
+  ctx.putImageData(data, 0, 0);
+}
+
+
 // show_density();
 // scaled_sample();
 // k_means()
 // flat_sample();
 // scaled_skipping();
 // test_cumulative();
-show_cumulative();
+// show_cumulative();
+// test_generate_bayer();
+bayer_dithering(generate_bayer(32));
 
 //682x199
 //701x200
@@ -546,4 +637,8 @@ Now that we have the function, how to we grid it?
 
 
 - New idea: follow gradient with some sort of initial velocity?
+
+- ACTUALLY GOOD NEW IDEA! Dithering (https://en.wikipedia.org/wiki/Dither#Algorithms)
+  - function magnitude stands in for color value
+  - IT WORKS! With a matrix, it's hard to control the density, but using a random method might fix that
 */
