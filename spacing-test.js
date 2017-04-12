@@ -544,6 +544,7 @@ function bayer_dithering(matrix) {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
   var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  var stddev = 150;
 
   var idx, i, j, value, function_val, result;
   for (var y=0; y<canvas.height; y++) {
@@ -551,9 +552,18 @@ function bayer_dithering(matrix) {
       i = x % matrix.length;
       j = y % matrix.length;
 
-      function_val = get_density({x:x, y:y}, [{x: 480, y: 340}, {x: 780, y: 540}]) * .3
+
+      function_val = (
+        // Math.exp(-1/(2*stddev*stddev) * (
+        //   Math.pow(x-380, 2) + Math.pow(y-240, 2)
+        // )) +
+        Math.exp(-1/(2*stddev*stddev) * (
+          Math.pow(x-780, 2) + Math.pow(y-540, 2)
+        ))
+      ) * .015
+
       idx = (y * canvas.width + x) * 4;
-      result = function_val * matrix.length > matrix[j][i] ? 255 : 0;
+      result = function_val * matrix.length * matrix.length > matrix[j][i] ? 255 : 0;
 
       data.data[idx+3] = result;
     }
